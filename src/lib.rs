@@ -1,5 +1,7 @@
-#![no_std]
 #![cfg_attr(feature = "wisp-mux", feature(return_type_notation))]
+
+#![no_std]
+
 use core::{future::poll_fn, mem::replace, task::Poll};
 
 use alloc::{borrow::ToOwned, collections::vec_deque::VecDeque, string::String, vec::Vec};
