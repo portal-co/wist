@@ -129,8 +129,9 @@ const _: () = {
         WispError,
         ws::{Frame, LockedWebSocketWrite, OpCode, WebSocketRead, WebSocketWrite},
     };
-
+    #[cfg(feature = "wisp-mux")]
     trait SHTTP: HTTP<req(..): Send> {}
+    #[cfg(feature = "wisp-mux")]
     impl<T: HTTP<req(..): Send>> SHTTP for T {}
 
     #[async_trait::async_trait]
