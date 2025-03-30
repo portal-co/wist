@@ -42,6 +42,9 @@ export class WebSocket extends EventTarget {
             var i = 0;
             while(i != a.byteLength){
                 var ty = d.getUint8(i);
+                if(ty == 0xff){
+                    return;
+                }
                 var len = d.getUint32(i + 1);
                 var b = a.slice(i + 5,i + 5 + len);
                 i += len + 5;
@@ -61,5 +64,8 @@ export class WebSocket extends EventTarget {
         d.setUint8(0, typeof message == "string" ? 1 : 0);
         d.setUint32(1, b.byteLength);
         this._messages.push(c);
+    }
+    close(...args: any[]){
+        this._messages.push(new Uint8Array([0xff]).buffer);
     }
 }

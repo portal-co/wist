@@ -1,8 +1,9 @@
 #![no_std]
+#![cfg_attr(feature = "wisp-mux", feature(return_type_notation))]
+use core::{future::poll_fn, mem::replace, task::Poll};
 
-use core::{future::poll_fn, task::Poll};
-
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::{borrow::ToOwned, collections::vec_deque::VecDeque, string::String, vec::Vec};
+use either::Either;
 use itertools::Itertools;
 use whisk::Channel;
 extern crate alloc;
@@ -10,11 +11,15 @@ extern crate alloc;
 pub enum WsFrame {
     String(String),
     Bytes(Vec<u8>),
+    Close,
 }
 impl WsFrame {
     pub fn from_bytes_iter(mut a: &mut (dyn Iterator<Item = u8> + '_)) -> Option<Self> {
         let a = &mut a;
         let flags = a.next()?;
+        if flags == 0xff {
+            return Some(Self::Close);
+        }
         let len = u32::from_be_bytes(a.next_array()?);
         let bytes = (0..len).map(|_| a.next()).collect::<Option<Vec<u8>>>()?;
         if flags & 0x1 == 0 {
@@ -27,17 +32,21 @@ impl WsFrame {
     }
     pub fn bytes(&self) -> impl Iterator<Item = u8> {
         let cb = match self {
+            WsFrame::Close => return Either::Left([0xff].into_iter()),
             WsFrame::String(s) => s.as_bytes(),
             WsFrame::Bytes(items) => items.as_ref(),
         };
         let flags = match self {
+            WsFrame::Close => return Either::Left([0xff].into_iter()),
             WsFrame::String(_) => 0x1,
             WsFrame::Bytes(items) => 0x0,
         };
-        [flags]
-            .into_iter()
-            .chain(u32::to_be_bytes((cb.len() & 0xffff_ffff) as u32))
-            .chain(cb.iter().cloned())
+        Either::Right(
+            [flags]
+                .into_iter()
+                .chain(u32::to_be_bytes((cb.len() & 0xffff_ffff) as u32))
+                .chain(cb.iter().cloned()),
+        )
     }
 }
 #[derive(Clone, Default)]
@@ -64,3 +73,134 @@ impl HTTPHandlerOnce {
         self.send.recv().await
     }
 }
+
+pub struct WsHandler<H> {
+    pub http: H,
+    send_buf: Vec<u8>,
+    recv_buf: VecDeque<WsFrame>,
+}
+impl<H> WsHandler<H> {
+    pub fn new(http: H) -> Self {
+        Self {
+            http,
+            send_buf: Default::default(),
+            recv_buf: Default::default(),
+        }
+    }
+    pub fn send(&mut self, f: WsFrame) {
+        self.send_buf.extend(f.bytes());
+    }
+}
+pub trait HTTP {
+    type Error;
+    async fn req(&mut self, a: &[u8]) -> Result<Vec<u8>, Self::Error>;
+}
+impl<H: HTTP<Error = E>, E> WsHandler<H> {
+    pub async fn recv(&mut self) -> Result<WsFrame, E> {
+        loop {
+            if let Some(f) = self.recv_buf.pop_front() {
+                return Ok(f);
+            }
+            let s = replace(&mut self.send_buf, Default::default());
+            let r = match self.http.req(&s).await {
+                Ok(a) => a,
+                Err(e) => {
+                    self.send_buf = s;
+                    return Err(e);
+                }
+            };
+            let mut r = r.into_iter();
+            while let Some(x) = WsFrame::from_bytes_iter(&mut r) {
+                self.recv_buf.push_back(x);
+            }
+        }
+    }
+    pub async fn close(&mut self) -> Result<(), E> {
+        self.http.req(&[0xff]).await?;
+        Ok(())
+    }
+}
+#[cfg(feature = "wisp-mux")]
+const _: () = {
+    use alloc::boxed::Box;
+    use core::convert::Infallible;
+
+    use wisp_mux::{
+        WispError,
+        ws::{Frame, LockedWebSocketWrite, OpCode, WebSocketRead, WebSocketWrite},
+    };
+
+    trait SHTTP: HTTP<req(..): Send> {}
+    impl<T: HTTP<req(..): Send>> SHTTP for T {}
+
+    #[async_trait::async_trait]
+    impl<H: SHTTP<Error = WispError> + Send> WebSocketRead for WsHandler<H> {
+        async fn wisp_read_frame(
+            &mut self,
+            tx: &LockedWebSocketWrite,
+        ) -> Result<Frame<'static>, WispError> {
+            let r = self.recv().await?;
+            Ok(match r {
+                WsFrame::String(s) => Frame::text(wisp_mux::ws::Payload::Bytes(
+                    s.into_bytes().as_slice().into(),
+                )),
+                WsFrame::Bytes(items) => {
+                    Frame::binary(wisp_mux::ws::Payload::Bytes(items.as_slice().into()))
+                }
+                WsFrame::Close => return Err(WispError::StreamAlreadyClosed),
+            })
+        }
+    }
+    #[async_trait::async_trait]
+    impl<H: SHTTP<Error = WispError> + Send> WebSocketWrite for WsHandler<H> {
+        async fn wisp_write_frame(&mut self, frame: Frame<'_>) -> Result<(), WispError> {
+            self.send(match frame.opcode {
+                OpCode::Text => {
+                    WsFrame::String(String::from_utf8_lossy(&frame.payload).as_ref().to_owned())
+                }
+                OpCode::Binary => WsFrame::Bytes(frame.payload.to_vec()),
+                _ => todo!(),
+            });
+            Ok(())
+        }
+        async fn wisp_close(&mut self) -> Result<(), WispError> {
+            self.close().await
+        }
+    }
+    #[async_trait::async_trait]
+    impl WebSocketRead for HTTPHandlerOnce {
+        async fn wisp_read_frame(
+            &mut self,
+            tx: &LockedWebSocketWrite,
+        ) -> Result<Frame<'static>, WispError> {
+            let r = self.recv_frame().await;
+            Ok(match r {
+                WsFrame::String(s) => Frame::text(wisp_mux::ws::Payload::Bytes(
+                    s.into_bytes().as_slice().into(),
+                )),
+                WsFrame::Bytes(items) => {
+                    Frame::binary(wisp_mux::ws::Payload::Bytes(items.as_slice().into()))
+                }
+                WsFrame::Close => return Err(WispError::StreamAlreadyClosed),
+            })
+        }
+    }
+    #[async_trait::async_trait]
+    impl WebSocketWrite for HTTPHandlerOnce {
+        async fn wisp_write_frame(&mut self, frame: Frame<'_>) -> Result<(), WispError> {
+            self.send_frame(match frame.opcode {
+                OpCode::Text => {
+                    WsFrame::String(String::from_utf8_lossy(&frame.payload).as_ref().to_owned())
+                }
+                OpCode::Binary => WsFrame::Bytes(frame.payload.to_vec()),
+                _ => todo!(),
+            })
+            .await;
+            Ok(())
+        }
+        async fn wisp_close(&mut self) -> Result<(), WispError> {
+            self.send_frame(WsFrame::Close).await;
+            Ok(())
+        }
+    }
+};
