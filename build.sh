@@ -1,1 +1,1 @@
-npx tsc  -m es6 -t es6 -d ./index.ts
+npx tsc  -m es6 -t es2017 -d ./index.ts
