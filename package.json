@@ -1,5 +1,5 @@
 {
-  "name": "@portal/wist",
+  "name": "@portal-solutions/wist",
   "version": "0.1.0",
   "description": "Websocket Tunneling",
   "main": "index.js",
