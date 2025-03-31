@@ -12,12 +12,12 @@ trait SHTTP: HTTP<req(..): Send> {}
 impl<T: HTTP<req(..): Send>> SHTTP for T {}
 
 #[async_trait::async_trait]
-impl<H: SHTTP<Error = WispError> + Send> WebSocketRead for WsHandler<H> {
+impl<H: SHTTP<Error: Into<WispError>> + Send> WebSocketRead for WsHandler<H> {
     async fn wisp_read_frame(
         &mut self,
         tx: &LockedWebSocketWrite,
     ) -> Result<Frame<'static>, WispError> {
-        let r = self.recv().await?;
+        let r = self.recv().await.map_err(|a| a.into())?;
         Ok(match r {
             WsFrame::String(s) => Frame::text(wisp_mux::ws::Payload::Bytes(
                 s.into_bytes().as_slice().into(),
@@ -25,12 +25,12 @@ impl<H: SHTTP<Error = WispError> + Send> WebSocketRead for WsHandler<H> {
             WsFrame::Bytes(items) => {
                 Frame::binary(wisp_mux::ws::Payload::Bytes(items.as_slice().into()))
             }
-            WsFrame::Close => return Err(WispError::StreamAlreadyClosed),
+            WsFrame::Close => Frame::close(wisp_mux::ws::Payload::Borrowed(&[])),
         })
     }
 }
 #[async_trait::async_trait]
-impl<H: SHTTP<Error = WispError> + Send> WebSocketWrite for WsHandler<H> {
+impl<H: SHTTP<Error: Into<WispError>> + Send> WebSocketWrite for WsHandler<H> {
     async fn wisp_write_frame(&mut self, frame: Frame<'_>) -> Result<(), WispError> {
         self.send(match frame.opcode {
             OpCode::Text => {
@@ -42,7 +42,7 @@ impl<H: SHTTP<Error = WispError> + Send> WebSocketWrite for WsHandler<H> {
         Ok(())
     }
     async fn wisp_close(&mut self) -> Result<(), WispError> {
-        self.close().await
+        self.close().await.map_err(|a| a.into())
     }
 }
 #[async_trait::async_trait]
@@ -59,7 +59,7 @@ impl WebSocketRead for HTTPHandlerOnce {
             WsFrame::Bytes(items) => {
                 Frame::binary(wisp_mux::ws::Payload::Bytes(items.as_slice().into()))
             }
-            WsFrame::Close => return Err(WispError::StreamAlreadyClosed),
+            WsFrame::Close => Frame::close(wisp_mux::ws::Payload::Borrowed(&[])),
         })
     }
 }
