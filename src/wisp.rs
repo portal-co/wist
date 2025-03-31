@@ -37,6 +37,7 @@ impl<H: SHTTP<Error: Into<WispError>> + Send> WebSocketWrite for WsHandler<H> {
                 WsFrame::String(String::from_utf8_lossy(&frame.payload).as_ref().to_owned())
             }
             OpCode::Binary => WsFrame::Bytes(frame.payload.to_vec()),
+            OpCode::Close => WsFrame::Close,
             _ => todo!(),
         });
         Ok(())
@@ -71,6 +72,7 @@ impl WebSocketWrite for HTTPHandlerOnce {
                 WsFrame::String(String::from_utf8_lossy(&frame.payload).as_ref().to_owned())
             }
             OpCode::Binary => WsFrame::Bytes(frame.payload.to_vec()),
+            OpCode::Close => WsFrame::Close,
             _ => todo!(),
         })
         .await;
