@@ -1,12 +1,18 @@
 #![cfg_attr(feature = "wisp-mux", feature(return_type_notation))]
-
 #![no_std]
 
-use core::{future::poll_fn, mem::replace, task::Poll};
+use core::{future::poll_fn, mem::{replace, take}, task::Poll};
 
-use alloc::{borrow::ToOwned, collections::vec_deque::VecDeque, string::String, vec::Vec};
+use alloc::{
+    borrow::ToOwned,
+    collections::{btree_map::BTreeMap, vec_deque::VecDeque},
+    string::String,
+    sync::Arc,
+    vec::Vec,
+};
 use either::Either;
 use itertools::Itertools;
+use spin::Mutex;
 use whisk::Channel;
 extern crate alloc;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -124,3 +130,52 @@ impl<H: HTTP<Error = E>, E> WsHandler<H> {
 }
 #[cfg(feature = "wisp-mux")]
 mod wisp;
+#[derive(Clone)]
+pub struct WistTunnelState<F> {
+    locks: Arc<Mutex<BTreeMap<String, (HTTPHandlerOnce, F)>>>,
+    go: Arc<dyn Fn(String, HTTPHandlerOnce) -> F + Send + Sync>,
+}
+impl<F> WistTunnelState<F> {
+    pub fn handler(&self, a: String) -> HTTPHandlerOnce {
+        let mut l = self.locks.lock();
+        loop {
+            if let Some(x) = l.get(&a) {
+                return x.0.clone();
+            }
+            let x = HTTPHandlerOnce::default();
+            let g = (self.go)(a.clone(), x.clone());
+            l.insert(a.clone(), (x, g));
+        }
+    }
+    pub fn new(go: impl Fn(String, HTTPHandlerOnce) -> F + Send + Sync + 'static) -> Self {
+        Self {
+            locks: Default::default(),
+            go: Arc::new(go),
+        }
+    }
+}
+impl<F: Future<Output = ()> + Unpin> Future for WistTunnelState<F> {
+    type Output = ();
+
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
+        use futures::FutureExt;
+        let a = self.get_mut();
+        loop {
+            let mut l = a.locks.lock();
+            if l.len() == 0 {
+                return Poll::Ready(());
+            }
+            let mut i = take(&mut *l).into_iter();
+            while let Some((k,(j,mut f))) = i.next(){
+                let Poll::Ready(_) = f.poll_unpin(cx) else{
+                    l.insert(k, (j,f));
+                    l.extend(i);
+                    return Poll::Pending;
+                };
+            }
+        }
+    }
+}
