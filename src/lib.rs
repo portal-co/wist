@@ -130,10 +130,15 @@ impl<H: HTTP<Error = E>, E> WsHandler<H> {
 }
 #[cfg(feature = "wisp-mux")]
 mod wisp;
-#[derive(Clone)]
+
 pub struct WistTunnelState<F> {
     locks: Arc<Mutex<BTreeMap<String, (HTTPHandlerOnce, F)>>>,
     go: Arc<dyn Fn(String, HTTPHandlerOnce) -> F + Send + Sync>,
+}
+impl<F> Clone for WistTunnelState<F>{
+    fn clone(&self) -> Self {
+        Self { locks: self.locks.clone(), go: self.go.clone() }
+    }
 }
 impl<F> WistTunnelState<F> {
     pub fn handler(&self, a: String) -> HTTPHandlerOnce {
