@@ -1,15 +1,38 @@
+let _Uint8Array: typeof Uint8Array = globalThis.Uint8Array;
+let _ArrayBuffer: typeof ArrayBuffer = globalThis.ArrayBuffer;
+let _byteLength = Object.getOwnPropertyDescriptor(_ArrayBuffer.prototype,'byteLength')!.get!;
+let _Reflect: typeof Reflect = {...Reflect};
+let byteLength = (a: ArrayBuffer) => Reflect.apply(_byteLength,a,[]);
+let set =Uint8Array.prototype.set.call.bind(Uint8Array.prototype.set);
 function appendBuffers(buffer1: ArrayBuffer, buffer2: ArrayBuffer): ArrayBuffer {
-    var tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
-    tmp.set(new Uint8Array(buffer1), 0);
-    tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+    var tmp = new _Uint8Array(byteLength(buffer1) + byteLength(buffer2));
+    set(tmp,new _Uint8Array(buffer1), 0);
+    set(tmp,new _Uint8Array(buffer2), byteLength(buffer1));
     return tmp.buffer;
+};
+let _URL: typeof URL = globalThis.URL;
+let _fetch: typeof fetch = globalThis.fetch;
+let _Promise: typeof Promise = globalThis.Promise;
+let _DataView: typeof DataView = globalThis.DataView;
+let _sliceProp = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype,'slice')!.get!;
+let _slice = (a: ArrayBuffer,b:number,c:number) => Reflect.apply(_sliceProp,a,[b,c]);
+let _requestAnimationFrame: typeof requestAnimationFrame = globalThis.requestAnimationFrame.bind(globalThis);
+let _decoder = new TextDecoder();
+let decode = _decoder.decode.bind(_decoder);
+// let _dataView: typeof DataView = globalThis.DataView;
+
+let intOps = {
+    'getUint8': DataView.prototype.getUint8.call.bind(DataView.prototype.getUint8),
+    'getUint32': DataView.prototype.getUint32.call.bind(DataView.prototype.getUint32),
+        'setUint8': DataView.prototype.setUint8.call.bind(DataView.prototype.setUint8),
+    'setUint32': DataView.prototype.setUint32.call.bind(DataView.prototype.setUint32),
 };
 export class WebSocket extends EventTarget {
     #url: URL;
     #messages: ArrayBuffer[];
     constructor(url: string | URL) {
         super();
-        var u: URL = typeof url === "string" ? new URL(url) : url;
+        var u: URL = typeof url === "string" ? new _URL(url) : url;
         if (u.protocol == "ws:") {
             u.protocol = "http:"
         }
@@ -22,34 +45,35 @@ export class WebSocket extends EventTarget {
         this.#start();
     }
     async #start() {
-        let iid = await fetch(this.#url).then(a => a.text());
+        let iid = await _fetch(this.#url).then(a => a.text());
         while (1) {
             var m = this.#messages;
             if(!m.length){
-                await new Promise(requestAnimationFrame);
+                await new _Promise(_requestAnimationFrame);
                 continue;
             }
             this.#messages = [];
-            var m2 = m.reduce(appendBuffers,new ArrayBuffer(0));
-            var a = await fetch(this.#url,{
+            var m2 = m.reduce(appendBuffers,new _ArrayBuffer(0));
+            var a = await _fetch(this.#url,{
                 method: "POST",
                 body: m2,
                 headers: {
                     "X-Instance-Id": iid,
                 }
             }).then(a => a.arrayBuffer());
-            var d = new DataView(a);
+            var len2 = byteLength(a);
+            var d = new _DataView(a);
             var i = 0;
-            while(i != a.byteLength){
-                var ty = d.getUint8(i);
+            while(i != len2){
+                var ty = intOps.getUint8(d,i);
                 if(ty == 0xff){
                     return;
                 }
-                var len = d.getUint32(i + 1);
-                var b = a.slice(i + 5,i + 5 + len);
+                var len = intOps.getUint32(d,i + 1);
+                var b = _slice(a,i + 5,i + 5 + len);
                 i += len + 5;
                 if(ty & 1){
-                    this.dispatchEvent(new MessageEvent("message",{data: new TextDecoder().decode(b)}))
+                    this.dispatchEvent(new MessageEvent("message",{data: decode(b)}))
                 }else{
                     this.dispatchEvent(new MessageEvent("message",{data: b}))
                 }
@@ -58,14 +82,14 @@ export class WebSocket extends EventTarget {
     }
     postMessage(message: string | ArrayBuffer) {
         var b = typeof message == "string" ? new TextEncoder().encode(message) : new Uint8Array(message);
-        var c = new ArrayBuffer(b.byteLength + 5);
-        new Uint8Array(c, 5).set(b, 0);
-        var d = new DataView(c);
-        d.setUint8(0, typeof message == "string" ? 1 : 0);
-        d.setUint32(1, b.byteLength);
-        this.#messages.push(c);
+        var c = new _ArrayBuffer(b.byteLength + 5);
+        set(new Uint8Array(c, 5),b, 0);
+        var d = new _DataView(c);
+        intOps.setUint8(d,0, typeof message == "string" ? 1 : 0);
+        intOps.setUint32(d,1, b.byteLength);
+        this.#messages[this.#messages.length] = c;
     }
     close(...args: any[]){
-        this.#messages.push(new Uint8Array([0xff]).buffer);
+        this.#messages[this.#messages.length] = new Uint8Array([0xff]).buffer;
     }
 }
