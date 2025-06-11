@@ -6,6 +6,8 @@ function appendBuffers(buffer1, buffer2) {
 }
 ;
 export class WebSocket extends EventTarget {
+    #url;
+    #messages;
     constructor(url) {
         super();
         var u = typeof url === "string" ? new URL(url) : url;
@@ -16,21 +18,21 @@ export class WebSocket extends EventTarget {
             u.protocol = "https:";
         }
         u.pathname += ".wist";
-        this._url = u;
-        this._messages = [];
-        this._start();
+        this.#url = u;
+        this.#messages = [];
+        this.#start();
     }
-    async _start() {
-        let iid = await fetch(this._url).then(a => a.text());
+    async #start() {
+        let iid = await fetch(this.#url).then(a => a.text());
         while (1) {
-            var m = this._messages;
+            var m = this.#messages;
             if (!m.length) {
                 await new Promise(requestAnimationFrame);
                 continue;
             }
-            this._messages = [];
+            this.#messages = [];
             var m2 = m.reduce(appendBuffers, new ArrayBuffer(0));
-            var a = await fetch(this._url, {
+            var a = await fetch(this.#url, {
                 method: "POST",
                 body: m2,
                 headers: {
@@ -63,9 +65,9 @@ export class WebSocket extends EventTarget {
         var d = new DataView(c);
         d.setUint8(0, typeof message == "string" ? 1 : 0);
         d.setUint32(1, b.byteLength);
-        this._messages.push(c);
+        this.#messages.push(c);
     }
     close(...args) {
-        this._messages.push(new Uint8Array([0xff]).buffer);
+        this.#messages.push(new Uint8Array([0xff]).buffer);
     }
 }
