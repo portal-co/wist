@@ -30,8 +30,11 @@ let intOps = {
 export class WebSocket extends EventTarget {
     #url;
     #messages;
-    constructor(url) {
+    #queueLength;
+    #proc;
+    constructor(url, opts = {}) {
         super();
+        this.#proc = opts.proc ?? ((a, m) => a);
         var u = typeof url === "string" ? new _URL(url) : url;
         if (u.protocol == "ws:") {
             u.protocol = "http:";
@@ -41,6 +44,7 @@ export class WebSocket extends EventTarget {
         }
         u.pathname += ".wist";
         this.#url = u;
+        this.#queueLength = opts.queueLength ?? 0;
         this.#messages = [];
         this.#start();
     }
@@ -48,7 +52,7 @@ export class WebSocket extends EventTarget {
         let iid = await _fetch(this.#url).then(a => a.text());
         while (1) {
             var m = this.#messages;
-            if (!m.length) {
+            if (m.length < this.#queueLength) {
                 await new _Promise(_requestAnimationFrame);
                 continue;
             }
@@ -56,11 +60,12 @@ export class WebSocket extends EventTarget {
             var m2 = m.reduce(appendBuffers, new _ArrayBuffer(0));
             var a = await _fetch(this.#url, {
                 method: "POST",
-                body: m2,
+                body: this.#proc(new _Uint8Array(m2), 'encrypt'),
                 headers: {
                     "X-Instance-Id": iid,
                 }
             }).then(a => a.arrayBuffer());
+            a = this.#proc(new _Uint8Array(a), 'decrypt');
             var len2 = byteLength(a);
             var d = new _DataView(a);
             var i = 0;
@@ -92,5 +97,94 @@ export class WebSocket extends EventTarget {
     }
     close(...args) {
         this.#messages[this.#messages.length] = new Uint8Array([0xff]).buffer;
+    }
+}
+const expiry = new WeakMap();
+export class Server {
+    #ids;
+    #expiry;
+    #proc;
+    #init;
+    constructor(expiry, opts = {}) {
+        this.#ids = [];
+        this.#expiry = expiry;
+        this.#proc = opts.proc ?? ((a, m) => a);
+        this.#init = opts.init ?? (a => { });
+    }
+    async handle(r) {
+        if (r.method === "GET") {
+            let id = 0;
+            while (!(this.#ids?.[id]?.expired() ?? true)) {
+                id++;
+            }
+            let s = `${id}}`;
+            this.#init(this.#ids[id] = new ServerUser(Date.now() + this.#expiry));
+            return new Response(s);
+        }
+        // if(r.method === "post"){
+        let h = r.headers.get("X-Instance-Id");
+        if (h === null) {
+            return new Response(this.#proc(new Uint8Array([0xff]), 'encrypt'));
+        }
+        let user = (this.#ids[h] ??= new ServerUser(Date.now() + this.#expiry));
+        let s = user.takeMessages();
+        if (s === undefined) {
+            return new Response(this.#proc(new Uint8Array([0xff]), 'encrypt'));
+        }
+        user.onBuffer(this.#proc(new Uint8Array(await r.arrayBuffer()), 'decrypt'));
+        expiry.set(user, Date.now() + this.#expiry);
+        // this.#ids[s] = [];
+        return new Response(this.#proc(new Uint8Array(s.reduce(appendBuffers, new ArrayBuffer(0))), 'encrypt'));
+        // }
+    }
+}
+export class ServerUser extends EventTarget {
+    #messages;
+    // #expiry: number;
+    // #queue: ArrayBuffer[];
+    constructor(expiry_) {
+        super();
+        // this.#messages;
+        // this.#expiry = expiry;
+        expiry.set(this, expiry_);
+        // this.#queue = [];
+    }
+    expired() {
+        return expiry.get(this) >= Date.now();
+    }
+    takeMessages() {
+        let m = this.#messages;
+        this.#messages = undefined;
+        return m;
+    }
+    postMessage(message) {
+        this.#messages ??= [];
+        var b = typeof message == "string" ? new TextEncoder().encode(message) : new Uint8Array(message);
+        var c = new _ArrayBuffer(b.byteLength + 5);
+        set(new Uint8Array(c, 5), b, 0);
+        var d = new _DataView(c);
+        intOps.setUint8(d, 0, typeof message == "string" ? 1 : 0);
+        intOps.setUint32(d, 1, b.byteLength);
+        this.#messages[this.#messages.length] = c;
+    }
+    onBuffer(a) {
+        var len2 = byteLength(a);
+        var d = new _DataView(a);
+        var i = 0;
+        while (i != len2) {
+            var ty = intOps.getUint8(d, i);
+            if (ty == 0xff) {
+                return;
+            }
+            var len = intOps.getUint32(d, i + 1);
+            var b = _slice(a, i + 5, i + 5 + len);
+            i += len + 5;
+            if (ty & 1) {
+                this.dispatchEvent(new MessageEvent("message", { data: decode(b) }));
+            }
+            else {
+                this.dispatchEvent(new MessageEvent("message", { data: b }));
+            }
+        }
     }
 }
