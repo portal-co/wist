@@ -65,7 +65,7 @@ export class WebSocket extends EventTarget {
                     "X-Instance-Id": iid,
                 }
             }).then(a => a.arrayBuffer());
-            a = this.#proc(new _Uint8Array(a), 'decrypt');
+            a = this.#proc(new _Uint8Array(a), 'decrypt').buffer;
             var len2 = byteLength(a);
             var d = new _DataView(a);
             var i = 0;
@@ -131,7 +131,7 @@ export class Server {
         if (s === undefined) {
             return new Response(this.#proc(new Uint8Array([0xff]), 'encrypt'));
         }
-        user.onBuffer(this.#proc(new Uint8Array(await r.arrayBuffer()), 'decrypt'));
+        user.onBuffer(this.#proc(new Uint8Array(await r.arrayBuffer()), 'decrypt').buffer);
         expiry.set(user, Date.now() + this.#expiry);
         // this.#ids[s] = [];
         return new Response(this.#proc(new Uint8Array(s.reduce(appendBuffers, new ArrayBuffer(0))), 'encrypt'));
