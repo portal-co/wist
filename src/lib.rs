@@ -1,10 +1,14 @@
 #![cfg_attr(feature = "wisp-mux", feature(return_type_notation))]
 #![no_std]
 
-use core::{future::poll_fn, mem::{replace, take}, task::Poll};
+use core::{
+    future::poll_fn,
+    mem::{replace, take},
+    task::Poll,
+};
 
 use alloc::{
-    borrow::ToOwned,
+    borrow::{Cow, ToOwned},
     collections::{btree_map::BTreeMap, vec_deque::VecDeque},
     string::String,
     sync::Arc,
@@ -15,6 +19,11 @@ use itertools::Itertools;
 use spin::Mutex;
 use whisk::Channel;
 extern crate alloc;
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Encryption {
+    Encrypt,
+    Decrypt,
+}
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum WsFrame {
     String(String),
@@ -63,7 +72,13 @@ pub struct HTTPHandlerOnce {
     recv: Channel<WsFrame>,
 }
 impl HTTPHandlerOnce {
-    pub async fn process(&self, a: &[u8], max_resp: u32) -> Vec<u8> {
+    pub async fn process_transformed(
+        &self,
+        a: &[u8],
+        transform: &mut (dyn FnMut(&[u8], Encryption) -> Cow<'_, [u8]> + '_),
+        max_resp: u32,
+    ) -> Vec<u8> {
+        let a = transform(a, Encryption::Decrypt);
         let mut b = a.iter().cloned();
         while let Some(x) = WsFrame::from_bytes_iter(&mut b) {
             self.send.send(x).await;
@@ -72,7 +87,12 @@ impl HTTPHandlerOnce {
         while b.len() < max_resp as usize {
             b.extend(self.recv.recv().await.bytes());
         }
-        b
+        transform(&b, Encryption::Encrypt).into_owned()
+    }
+    pub async fn process(&self, a: &[u8], max_resp: u32) -> Vec<u8> {
+        return self
+            .process_transformed(a, &mut |a, _| Cow::Borrowed(a), max_resp)
+            .await;
     }
     pub async fn send_frame(&self, x: WsFrame) {
         self.recv.send(x).await
@@ -102,6 +122,20 @@ impl<H> WsHandler<H> {
 pub trait HTTP {
     type Error;
     async fn req(&mut self, a: &[u8]) -> Result<Vec<u8>, Self::Error>;
+}
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Transform<H, F> {
+    pub wrapped: H,
+    pub processor: F,
+}
+impl<H: HTTP, F: FnMut(&[u8], Encryption) -> Cow<'_, [u8]>> HTTP for Transform<H, F> {
+    type Error = H::Error;
+
+    async fn req(&mut self, a: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        let a = (self.processor)(a, Encryption::Encrypt);
+        let r = self.wrapped.req(&a).await?;
+        Ok((self.processor)(&r, Encryption::Decrypt).into_owned())
+    }
 }
 impl<H: HTTP<Error = E>, E> WsHandler<H> {
     pub async fn recv(&mut self) -> Result<WsFrame, E> {
@@ -135,9 +169,12 @@ pub struct WistTunnelState<F> {
     locks: Arc<Mutex<BTreeMap<String, (HTTPHandlerOnce, F)>>>,
     go: Arc<dyn Fn(String, HTTPHandlerOnce) -> F + Send + Sync>,
 }
-impl<F> Clone for WistTunnelState<F>{
+impl<F> Clone for WistTunnelState<F> {
     fn clone(&self) -> Self {
-        Self { locks: self.locks.clone(), go: self.go.clone() }
+        Self {
+            locks: self.locks.clone(),
+            go: self.go.clone(),
+        }
     }
 }
 impl<F> WistTunnelState<F> {
@@ -174,9 +211,9 @@ impl<F: Future<Output = ()> + Unpin> Future for WistTunnelState<F> {
                 return Poll::Ready(());
             }
             let mut i = take(&mut *l).into_iter();
-            while let Some((k,(j,mut f))) = i.next(){
-                let Poll::Ready(_) = f.poll_unpin(cx) else{
-                    l.insert(k, (j,f));
+            while let Some((k, (j, mut f))) = i.next() {
+                let Poll::Ready(_) = f.poll_unpin(cx) else {
+                    l.insert(k, (j, f));
                     l.extend(i);
                     return Poll::Pending;
                 };
