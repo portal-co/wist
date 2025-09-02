@@ -64,11 +64,13 @@ export class WebSocket extends EventTarget {
   #queueLength: number;
   #proc: (a: Uint8Array<ArrayBuffer>, mode: Mode) => Uint8Array<ArrayBuffer>;
   #opts: Opts;
+  #useHeader: boolean = false;
   constructor(
     url: string | URL,
     opts: {
       queueLength?: number;
       proc?(a: Uint8Array<ArrayBuffer>, mode: Mode): Uint8Array<ArrayBuffer>;
+      useHeader?: boolean;
     } & Opts = {}
   ) {
     super();
@@ -85,6 +87,7 @@ export class WebSocket extends EventTarget {
     this.#url = u;
     this.#queueLength = opts.queueLength ?? 0;
     this.#messages = [];
+    this.#useHeader = opts.useHeader ?? true;
     this.#start();
   }
   async #start() {
@@ -102,7 +105,9 @@ export class WebSocket extends EventTarget {
     } = this.#opts;
     const instance_id = await fetch(this.#url).then((resp) => resp.text());
     const ephemeralURL = new URL(this.#url);
-    ephemeralURL.searchParams.set("q", instance_id);
+    if (!this.#useHeader) {
+      ephemeralURL.searchParams.set("q", instance_id);
+    }
     while (1) {
       const mesages = this.#messages;
       if (mesages.length < this.#queueLength) {
@@ -114,6 +119,7 @@ export class WebSocket extends EventTarget {
       let response = await _fetch(ephemeralURL, {
         method: "POST",
         body: this.#proc(new Uint8Array(m2), "encrypt"),
+        headers: this.#useHeader ? { "X-Instance-Id": instance_id } : {},
       }).then((responseObject) => responseObject.arrayBuffer());
       response = this.#proc(new Uint8Array(response), "decrypt").buffer;
       const responseLength = _byteLength(response);
@@ -182,17 +188,20 @@ export class Server {
   #expiry: number;
   #proc: (a: Uint8Array<ArrayBuffer>, mode: Mode) => Uint8Array<ArrayBuffer>;
   #init: (a: ServerUser) => void;
+  #useHeader: boolean = false;
   constructor(
     expiry: number,
     opts: {
       proc?(a: Uint8Array<ArrayBuffer>, mode: Mode): Uint8Array<ArrayBuffer>;
       init?(a: ServerUser);
+      useHeader?: boolean;
     } = {}
   ) {
     this.#ids = [];
     this.#expiry = expiry;
     this.#proc = opts.proc ?? ((a, m) => a);
     this.#init = opts.init ?? ((a) => {});
+    this.#useHeader = opts.useHeader ?? false;
   }
   async handle(r: Request): Promise<Response> {
     if (r.method === "GET") {
@@ -205,7 +214,9 @@ export class Server {
       return new Response(s);
     }
     // if(r.method === "post"){
-    let h = r.headers.get("X-Instance-Id");
+    let h = this.#useHeader
+      ? r.headers.get("X-Instance-Id")
+      : new URL(r.url).searchParams.get("q");
     if (h === null) {
       return new Response(this.#proc(new Uint8Array([0xff]), "encrypt"));
     }
