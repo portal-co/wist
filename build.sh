@@ -1,1 +1,2 @@
-npx tsc  -m esnext -t esnext -d ./index.ts
+cd $(dirname $0)
+npx zshy
