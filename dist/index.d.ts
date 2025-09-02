@@ -34,6 +34,7 @@ export declare class WebSocket extends EventTarget {
     constructor(url: string | URL, opts?: {
         queueLength?: number;
         proc?(a: Uint8Array<ArrayBuffer>, mode: Mode): Uint8Array<ArrayBuffer>;
+        useHeader?: boolean;
     } & Opts);
     postMessage(message: string | ArrayBuffer): void;
     close(...args: any[]): void;
@@ -43,6 +44,7 @@ export declare class Server {
     constructor(expiry: number, opts?: {
         proc?(a: Uint8Array<ArrayBuffer>, mode: Mode): Uint8Array<ArrayBuffer>;
         init?(a: ServerUser): any;
+        useHeader?: boolean;
     });
     handle(r: Request): Promise<Response>;
 }
