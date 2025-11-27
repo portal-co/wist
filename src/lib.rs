@@ -1,12 +1,10 @@
 #![cfg_attr(feature = "wisp-mux", feature(return_type_notation))]
 #![no_std]
-
 use core::{
     future::poll_fn,
     mem::{replace, take},
     task::Poll,
 };
-
 use alloc::{
     borrow::{Cow, ToOwned},
     collections::{btree_map::BTreeMap, vec_deque::VecDeque},
@@ -101,7 +99,6 @@ impl HTTPHandlerOnce {
         self.send.recv().await
     }
 }
-
 pub struct WsHandler<H> {
     pub http: H,
     send_buf: Vec<u8>,
@@ -130,7 +127,6 @@ pub struct Transform<H, F> {
 }
 impl<H: HTTP, F: FnMut(&[u8], Encryption) -> Cow<'_, [u8]>> HTTP for Transform<H, F> {
     type Error = H::Error;
-
     async fn req(&mut self, a: &[u8]) -> Result<Vec<u8>, Self::Error> {
         let a = (self.processor)(a, Encryption::Encrypt);
         let r = self.wrapped.req(&a).await?;
@@ -164,7 +160,6 @@ impl<H: HTTP<Error = E>, E> WsHandler<H> {
 }
 #[cfg(feature = "wisp-mux")]
 mod wisp;
-
 pub struct WistTunnelState<F> {
     locks: Arc<Mutex<BTreeMap<String, (HTTPHandlerOnce, F)>>>,
     go: Arc<dyn Fn(String, HTTPHandlerOnce) -> F + Send + Sync>,
@@ -198,7 +193,6 @@ impl<F> WistTunnelState<F> {
 }
 impl<F: Future<Output = ()> + Unpin> Future for WistTunnelState<F> {
     type Output = ();
-
     fn poll(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,

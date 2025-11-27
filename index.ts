@@ -1,48 +1,22 @@
-const _Uint8Array: typeof Uint8Array = globalThis.Uint8Array;
-const _ArrayBuffer: typeof ArrayBuffer = globalThis.ArrayBuffer;
-const _byteLength = Object.getOwnPropertyDescriptor(
-  _ArrayBuffer.prototype,
-  "byteLength"
-)!.get!;
-const _Reflect: typeof Reflect = { ...Reflect };
-const byteLength = (a: ArrayBuffer) => Reflect.apply(_byteLength, a, []);
-const set = Uint8Array.prototype.set.call.bind(Uint8Array.prototype.set);
-function appendBuffers(
-  buffer1: ArrayBuffer,
-  buffer2: ArrayBuffer
-): ArrayBuffer {
-  const tmp = new _Uint8Array(byteLength(buffer1) + byteLength(buffer2));
-  set(tmp, new _Uint8Array(buffer1), 0);
-  set(tmp, new _Uint8Array(buffer2), byteLength(buffer1));
-  return tmp.buffer;
-}
-const _URL: typeof URL = globalThis.URL;
-const _fetch: typeof fetch = globalThis.fetch;
-const _Promise: typeof Promise = globalThis.Promise;
-const _DataView: typeof DataView = globalThis.DataView;
-const _sliceProp = Object.getOwnPropertyDescriptor(
-  ArrayBuffer.prototype,
-  "slice"
-)!.get!;
-const _slice = (a: ArrayBuffer, b: number, c: number) =>
-  Reflect.apply(_sliceProp, a, [b, c]);
-const _requestAnimationFrame: typeof requestAnimationFrame =
-  globalThis.requestAnimationFrame.bind(globalThis);
-const _decoder = new TextDecoder();
-const decode = _decoder.decode.bind(_decoder);
-// let _dataView: typeof DataView = globalThis.DataView;
-
-const intOps = {
-  getUint8: DataView.prototype.getUint8.call.bind(DataView.prototype.getUint8),
-  getUint32: DataView.prototype.getUint32.call.bind(
-    DataView.prototype.getUint32
-  ),
-  setUint8: DataView.prototype.setUint8.call.bind(DataView.prototype.setUint8),
-  setUint32: DataView.prototype.setUint32.call.bind(
-    DataView.prototype.setUint32
-  ),
-};
-if ("freeze" in Object) Object.freeze(intOps);
+import {
+  _ArrayBuffer,
+  _DataView,
+  _Promise,
+  _Reflect,
+  _URL,
+  _Uint8Array,
+  _byteLength,
+  _decoder,
+  _fetch,
+  _requestAnimationFrame,
+  _slice,
+  _sliceProp,
+  decode,
+  intOps,
+  appendBuffers,
+  byteLength,
+  set,
+} from "./snap.ts";
 export type Opts = {
   _URL?: typeof _URL;
   _fetch?: typeof fetch;

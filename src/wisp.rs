@@ -1,7 +1,6 @@
 use crate::*;
 use alloc::boxed::Box;
 use core::convert::Infallible;
-
 use wisp_mux::{
     WispError,
     ws::{Frame, LockedWebSocketWrite, OpCode, WebSocketRead, WebSocketWrite},
@@ -10,7 +9,6 @@ use wisp_mux::{
 trait SHTTP: HTTP<req(..): Send> {}
 #[cfg(feature = "wisp-mux")]
 impl<T: HTTP<req(..): Send>> SHTTP for T {}
-
 #[async_trait::async_trait]
 impl<H: SHTTP<Error: Into<WispError>> + Send> WebSocketRead for WsHandler<H> {
     async fn wisp_read_frame(
