@@ -20,6 +20,11 @@ export const _URL: typeof URL = globalThis.URL;
 export const _fetch: typeof fetch = globalThis.fetch;
 export const _Promise: typeof Promise = globalThis.Promise;
 export const _DataView: typeof DataView = globalThis.DataView;
+export const _WeakMap: typeof WeakMap = globalThis.WeakMap;
+export const weakMapOps = {
+  get: _WeakMap.prototype.get.call.bind(_WeakMap.prototype.get),
+  set: _WeakMap.prototype.set.call.bind(_WeakMap.prototype.set),
+};
 export const _sliceProp = Object.getOwnPropertyDescriptor(
   ArrayBuffer.prototype,
   "slice"
@@ -30,6 +35,8 @@ export const _requestAnimationFrame: typeof requestAnimationFrame =
   globalThis.requestAnimationFrame.bind(globalThis);
 export const _decoder = new TextDecoder();
 export const decode = _decoder.decode.bind(_decoder);
+export const _encoder = new TextEncoder();
+export const encode = _encoder.encode.bind(_encoder);
 // let _dataView: typeof DataView = globalThis.DataView;
 
 export const intOps = {
@@ -43,3 +50,17 @@ export const intOps = {
   ),
 };
 if ("freeze" in Object) Object.freeze(intOps);
+export type Opts = {
+  _URL?: typeof _URL;
+  _fetch?: typeof fetch;
+  intOps?: typeof intOps;
+  _Promise?: typeof _Promise;
+  _ArrayBuffer?: typeof _ArrayBuffer;
+  _Uint8Array?: typeof _Uint8Array;
+  _DataView?: typeof _DataView;
+  _slice?: typeof _slice;
+  byteLength?: typeof byteLength;
+  _requestAnimationFrame?: typeof _requestAnimationFrame;
+  set?: typeof set;
+  appendBuffers?: typeof appendBuffers;
+};

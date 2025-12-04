@@ -16,21 +16,9 @@ import {
   appendBuffers,
   byteLength,
   set,
+  Opts,
 } from "./snap.ts";
-export type Opts = {
-  _URL?: typeof _URL;
-  _fetch?: typeof fetch;
-  intOps?: typeof intOps;
-  _Promise?: typeof _Promise;
-  _ArrayBuffer?: typeof _ArrayBuffer;
-  _Uint8Array?: typeof _Uint8Array;
-  _DataView?: typeof _DataView;
-  _slice?: typeof _slice;
-  byteLength?: typeof byteLength;
-  _requestAnimationFrame?: typeof _requestAnimationFrame;
-  set?: typeof set;
-  appendBuffers?: typeof appendBuffers;
-};
+export { Opts } from "./snap.ts";
 export type Mode = "encrypt" | "decrypt";
 export class WebSocket extends EventTarget {
   #url: URL;

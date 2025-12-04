@@ -5,7 +5,10 @@
   "main": "./dist/index.cjs",
   "types": "./dist/index.d.cts",
   "zshy": {
-    ".": "index.ts"
+    ".": "index.ts",
+    "./main":"index.ts",
+    "./webtransport":"webtransport.ts",
+    "./epic":"epic.ts"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
