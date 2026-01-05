@@ -1,5 +1,6 @@
-node_modules
 
-# Added by cargo
-
+.DS_Store
 /target
+# Added by cargo
+node_modules
+target
