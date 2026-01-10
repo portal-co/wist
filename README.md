@@ -1,13 +1,14 @@
- # Wist, the WebSocket Tunnel
+# wist
 
-A Websocket tunneling protocol designed to ensure information access
+## Description
+"Websocket Tunneling". A crate/library for tunneling traffic over WebSockets using `wisp-mux`.
 
-It is geared towards request-response protocols like HTTP(S) and Discord.
 ## Goals
-- [ ] Add project goals
+- [ ] Tunnel TCP/UDP over WebSockets
+- [ ] Use `wisp-mux` protocol
 
 ## Progress
-- [ ] Initial setup
+- [ ] Crate initialized
 
 ---
 *AI assisted*
