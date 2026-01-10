@@ -3,3 +3,11 @@
 A Websocket tunneling protocol designed to ensure information access
 
 It is geared towards request-response protocols like HTTP(S) and Discord.
+## Goals
+- [ ] Add project goals
+
+## Progress
+- [ ] Initial setup
+
+---
+*AI assisted*
