@@ -37,7 +37,7 @@ export class WebSocket extends EventTarget {
   ) {
     super();
     this.#proc = opts.proc ?? ((a, m) => a);
-    this.#opts = { ...opts };
+    this.#opts = (opts.freeze ?? Object.freeze)({ ...opts });
     var u: URL = typeof url === "string" ? new (opts._URL ?? _URL)(url) : url;
     if (u.protocol == "ws:") {
       u.protocol = "http:";

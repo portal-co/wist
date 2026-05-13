@@ -63,4 +63,5 @@ export type Opts = {
   _requestAnimationFrame?: typeof _requestAnimationFrame;
   set?: typeof set;
   appendBuffers?: typeof appendBuffers;
+  freeze?: typeof Object.freeze;
 };
